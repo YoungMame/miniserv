@@ -6,12 +6,25 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/select.h>
 
-int client_ids[5000];
+
+const int BUFFER_SIZE = 400000;
+const int MAX_CLIENT_SIZE = 5000;
 
 static int g_is_running = 1;
-const int BUFFER_SIZE = 400000;
+int g_client_fds[MAX_CLIENT_SIZE];
+int last_client_attributed = 0;
+
+void broadcast(char *message, int except)
+{
+	int	i = 0;
+	for (int i = 0; i < MAX_CLIENT_SIZE; i++) {
+		if (g_client_fds[i] != 0 && g_client_fds[i] != except)
+			send(g_client_fds[i], message, strlen(message), 0);
+	}
+}
 
 int extract_message(char **buf, char **msg)
 {
@@ -112,8 +125,8 @@ int main() {
 		FD_SET(server_socket, &readfds);
 		for (int i = 0; i < 5000; i++)
 		{
-			if (client_ids[i] > 0)
-				FD_SET(i, &readfds);
+			if (g_client_fds[i] > 0)
+				FD_SET(g_client_fds[i], &readfds);
 		}
 
 		int activity = select(maxfd + 1, &readfds, NULL, NULL, NULL);
@@ -128,7 +141,8 @@ int main() {
 			int clientfd = accept(server_socket, (struct sockaddr *)&server_address, &len);
 			if (clientfd == -1)
 				return (exit_fatal(), 1);
-			client_ids[clientfd] = maxfd + 1;
+			g_client_fds[last_client_attributed] = clientfd;
+			last_client_attributed++;
 			if (clientfd > maxfd)
 				maxfd = clientfd;
 			printf("client fd = %i\n", clientfd);
@@ -137,7 +151,7 @@ int main() {
 		{
 			for (int i = 0; i < 5000; i++)
 			{
-				int fd = i;
+				int fd = g_client_fds[i];
 				if (fd > 0 && FD_ISSET(fd, &readfds))
 				{
 					bzero(received_message, BUFFER_SIZE);
@@ -149,13 +163,14 @@ int main() {
 						// broadcast that the client left
 						FD_CLR(fd, &writefds);
 						FD_CLR(fd, &readfds);
-						client_ids[i] = 0;
+						g_client_fds[i] = 0;
 						close(fd);
 					}
 					else
 					{
 						printf("Message received: %s\n", received_message);
-						// it's a message we have to broadcast it
+						sprintf(message_to_send, "client %i : %s", i, received_message);
+						broadcast(message_to_send, i);
 					}
 				}
 			}
