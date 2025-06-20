@@ -159,8 +159,8 @@ int main() {
 					int bytes = recv(fd, received_message, sizeof(received_message) - 1, 0);
 					if (bytes <= 0)
 					{
-						printf("Client leaved\n");
-						// broadcast that the client left
+						sprintf(message_to_send, "client %i leaved", i);
+						broadcast(message_to_send, i);
 						FD_CLR(fd, &writefds);
 						FD_CLR(fd, &readfds);
 						g_client_fds[i] = 0;
